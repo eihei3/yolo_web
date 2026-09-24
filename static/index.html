@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>鱼类检测系统 - 文件上传</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #f0f2f5; min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; gap: 28px;
+  }
+  .title { font-size: 24px; color: #1a1a1a; }
+  .card {
+    background: #fff; border: 2px dashed #d0d5dd; border-radius: 14px;
+    padding: 48px 32px; text-align: center; width: 100%; max-width: 460px;
+    cursor: pointer; transition: .2s;
+  }
+  .card:hover, .card.dragover { border-color: #0ab861; background: #f3fdf8; }
+  .card input { display: none; }
+  .card h1 { font-size: 20px; margin-bottom: 8px; }
+  .card p { font-size: 13px; color: #98a2b3; line-height: 1.7; }
+  .card p b { color: #0ab861; font-weight: 500; }
+  .icon {
+    width: 60px; height: 60px; margin: 0 auto 18px; border-radius: 50%;
+    background: #e9f9f1; display: flex; align-items: center; justify-content: center;
+  }
+  .icon svg { width: 28px; height: 28px; fill: none; stroke: #0ab861; stroke-width: 2; }
+  #info { display: none; margin-top: 18px; }
+  #info.show { display: block; }
+  #preview { max-width: 100%; border-radius: 8px; margin-top: 10px; }
+  #name { font-size: 13px; font-weight: 500; word-break: break-all; }
+  #clear { margin-top: 8px; font-size: 12px; color: #e8463a; background: none; border: none; cursor: pointer; }
+  .actions {
+    display: flex; gap: 14px; width: 100%; max-width: 460px;
+  }
+  .actions button {
+    flex: 1; padding: 11px 0; font-size: 14px; border-radius: 8px; cursor: pointer;
+    border: 1px solid #0ab861; background: #fff; color: #0ab861; transition: .2s;
+  }
+  .actions button:hover { background: #f3fdf8; }
+  .actions button:disabled { opacity: .5; cursor: not-allowed; }
+  #job { width: 100%; max-width: 460px; font-size: 13px; color: #475467; }
+  #job-msg.error { color: #e8463a; }
+  #job-msg.done { color: #0ab861; }
+  .card.busy { cursor: not-allowed; border-color: #d0d5dd; }
+  .card.busy:hover { background: #fff; border-color: #d0d5dd; }
+  #clear:disabled { opacity: .5; cursor: not-allowed; }
+  #bar {
+    display: none; height: 8px; background: #e4e7ec; border-radius: 4px;
+    overflow: hidden; margin-top: 8px;
+  }
+  #bar-fill { height: 100%; width: 0; background: #0ab861; transition: width .3s; }
+</style>
+</head>
+<body>
+  <h1 class="title">基于鱼群计数的目标检测模型</h1>
+  <div class="card" id="card">
+    <input type="file" id="file" accept="video/*,image/*">
+    <div class="icon">
+      <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 16V4M12 4l-5 5M12 4l5 5"/>
+        <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2"/>
+      </svg>
+    </div>
+    <h1>上传视频或图片</h1>
+    <p>点击选择或拖拽文件到此处<br>支持 <b>视频（MP4/AVI/MOV）</b> 与 <b>图片（JPG/PNG）</b></p>
+    <div id="info">
+      <div id="name"></div>
+      <img id="preview" style="display:none" alt="预览">
+      <br><button id="clear">移除文件</button>
+    </div>
+  </div>
+  <div class="actions">
+    <button type="button" id="btn-detect">检测视频</button>
+    <button type="button" id="btn-export-video" disabled>导出检测视频</button>
+    <button type="button" id="btn-export-data" disabled>导出数据</button>
+  </div>
+  <div id="job">
+    <div id="job-msg"></div>
+    <div id="bar"><div id="bar-fill"></div></div>
+  </div>
+
+<script>
+  const card = document.getElementById('card');
+  const input = document.getElementById('file');
+  const info = document.getElementById('info');
+  const nameEl = document.getElementById('name');
+  const img = document.getElementById('preview');
+  const btnDetect = document.getElementById('btn-detect');
+  const btnExportVideo = document.getElementById('btn-export-video');
+  const btnExportData = document.getElementById('btn-export-data');
+  const jobMsg = document.getElementById('job-msg');
+  const bar = document.getElementById('bar');
+  const barFill = document.getElementById('bar-fill');
+  let url, currentFile = null, jobId = null, pollTimer = null, isDetecting = false;
+
+  card.addEventListener('click', e => {
+    if (e.target.id === 'clear') return;
+    if (isDetecting) return;
+    input.click();
+  });
+  card.addEventListener('dragover', e => {
+    e.preventDefault();
+    if (!isDetecting) card.classList.add('dragover');
+  });
+  card.addEventListener('dragleave', () => card.classList.remove('dragover'));
+  card.addEventListener('drop', e => {
+    e.preventDefault(); card.classList.remove('dragover');
+    if (!isDetecting && e.dataTransfer.files[0]) load(e.dataTransfer.files[0]);
+  });
+  input.addEventListener('change', () => {
+    if (!isDetecting && input.files[0]) load(input.files[0]);
+  });
+  document.getElementById('clear').addEventListener('click', async e => {
+    e.stopPropagation();
+    if (isDetecting) return;
+    if (jobId) {
+      if (!window.confirm('移除文件将同步删除该视频的检测视频与全部数据（CSV/JSON/分析报告），确定删除吗？')) return;
+      const clearBtn = document.getElementById('clear');
+      clearBtn.disabled = true;
+      try {
+        const resp = await fetch(`/api/job/${jobId}`, { method: 'DELETE' });
+        if (!resp.ok) {
+          const d = await resp.json().catch(() => ({}));
+          alert('删除失败：' + (d.detail || '未知错误'));
+          clearBtn.disabled = false;
+          return;
+        }
+      } catch (err) {
+        alert('删除失败：' + err.message);
+        clearBtn.disabled = false;
+        return;
+      }
+    }
+    reset();
+  });
+
+  btnDetect.addEventListener('click', async () => {
+    if (!currentFile) { showJob('请先选择要检测的视频', 'error'); return; }
+    if (!isVideoFile(currentFile)) { showJob('检测功能目前仅支持视频文件', 'error'); return; }
+    const fd = new FormData();
+    fd.append('file', currentFile);
+    isDetecting = true;
+    card.classList.add('busy');
+    document.getElementById('clear').disabled = true;
+    btnDetect.disabled = true;
+    btnExportVideo.disabled = btnExportData.disabled = true;
+    showJob('正在上传视频并开始检测…');
+    bar.style.display = 'block';
+    barFill.style.width = '0%';
+    try {
+      const resp = await fetch('/api/detect', { method: 'POST', body: fd });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.detail || '检测启动失败');
+      jobId = data.job_id;
+      pollTimer = setInterval(poll, 1500);
+      poll();
+    } catch (e) {
+      showJob(e.message, 'error');
+      setNotBusy();
+      bar.style.display = 'none';
+    }
+  });
+
+  async function poll() {
+    try {
+      const resp = await fetch(`/api/status/${jobId}`);
+      const s = await resp.json();
+      if (s.status === 'processing') {
+        barFill.style.width = s.progress + '%';
+        jobMsg.className = '';
+        jobMsg.textContent = s.total
+          ? `检测中 ${s.frame}/${s.total} 帧（${s.progress}%）`
+          : '检测准备中…';
+      } else if (s.status === 'done') {
+        clearInterval(pollTimer);
+        pollTimer = null;
+        barFill.style.width = '100%';
+        setNotBusy();
+        btnExportVideo.disabled = btnExportData.disabled = false;
+        showJob('检测完成，可导出检测视频和数据', 'done');
+      } else {
+        clearInterval(pollTimer);
+        pollTimer = null;
+        showJob('检测失败：' + (s.error || '未知错误'), 'error');
+        setNotBusy();
+        bar.style.display = 'none';
+      }
+    } catch (e) { /* 网络抖动，保留定时器继续轮询 */ }
+  }
+
+  btnExportVideo.addEventListener('click', () => {
+    if (jobId) window.location.href = `/api/download/video/${jobId}`;
+  });
+  btnExportData.addEventListener('click', () => {
+    if (jobId) window.location.href = `/api/download/data/${jobId}`;
+  });
+
+  function showJob(text, cls) {
+    jobMsg.textContent = text;
+    jobMsg.className = cls || '';
+  }
+
+  function setNotBusy() {
+    isDetecting = false;
+    card.classList.remove('busy');
+    document.getElementById('clear').disabled = false;
+    btnDetect.disabled = false;
+  }
+
+  function isVideoFile(f) {
+    if (f.type.startsWith('video/')) return true;
+    return /\.(mp4|avi|mov|mkv|webm|m4v|wmv|flv|ts)$/i.test(f.name);
+  }
+
+  function load(f) {
+    reset();
+    currentFile = f;
+    nameEl.textContent = `${f.name}（${(f.size / 1048576).toFixed(2)} MB）`;
+    if (!isVideoFile(f)) {        // 仅图片生成预览；视频不内嵌播放，避免缺少解码器时无法显示
+      url = URL.createObjectURL(f);
+      img.src = url;
+      img.style.display = 'block';
+    }
+    info.classList.add('show');
+  }
+  function reset() {
+    if (url) URL.revokeObjectURL(url);
+    url = null; currentFile = null; jobId = null;
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = null;
+    input.value = ''; img.removeAttribute('src');
+    img.style.display = 'none'; info.classList.remove('show');
+    document.getElementById('clear').disabled = false;
+    btnDetect.disabled = false;
+    btnExportVideo.disabled = btnExportData.disabled = true;
+    showJob('');
+    bar.style.display = 'none';
+    barFill.style.width = '0%';
+  }
+</script>
+</body>
+</html>

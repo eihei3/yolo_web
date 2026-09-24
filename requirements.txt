@@ -1,0 +1,20 @@
+# YOLO_web 运行依赖（Python 3.10 - 3.12）
+# ultralytics 库已内置在本文件夹，无需 pip install ultralytics
+torch
+torchvision
+opencv-python
+numpy
+pandas
+pillow
+pyyaml
+requests
+scipy
+tqdm
+matplotlib
+seaborn
+psutil
+py-cpuinfo
+ultralytics-thop
+fastapi
+uvicorn
+python-multipart

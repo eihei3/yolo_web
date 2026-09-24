@@ -1,0 +1,31 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# ===== 运行时数据（个人上传视频与检测产物，勿提交）=====
+input/
+result/
+output/
+
+# ===== ultralytics 运行时生成 =====
+datasets/
+runs/
+weights/
+# 本机配置（含本机绝对路径与实例 UUID），首次运行会自动重新生成
+.ultralytics_cfg/
+
+# ===== 模型权重 =====
+# best.pt 体积约 5MB，默认随仓库提交以便开箱运行；
+# 若不希望公开训练权重，取消下面这行注释，并执行 git rm --cached model/best.pt
+# model/best.pt
+
+# ===== 系统/编辑器杂项 =====
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
