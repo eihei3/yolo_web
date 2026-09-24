@@ -57,18 +57,17 @@
 <body>
   <h1 class="title">基于鱼群计数的目标检测模型</h1>
   <div class="card" id="card">
-    <input type="file" id="file" accept="video/*,image/*">
+    <input type="file" id="file" accept=".mp4,.avi,.mov,.mkv">
     <div class="icon">
       <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
         <path d="M12 16V4M12 4l-5 5M12 4l5 5"/>
         <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2"/>
       </svg>
     </div>
-    <h1>上传视频或图片</h1>
-    <p>点击选择或拖拽文件到此处<br>支持 <b>视频（MP4/AVI/MOV）</b> 与 <b>图片（JPG/PNG）</b></p>
+    <h1>上传视频</h1>
+    <p>点击选择或拖拽视频到此处<br>支持 <b>MP4 / AVI / MOV / MKV</b> 格式</p>
     <div id="info">
       <div id="name"></div>
-      <img id="preview" style="display:none" alt="预览">
       <br><button id="clear">移除文件</button>
     </div>
   </div>
@@ -87,14 +86,13 @@
   const input = document.getElementById('file');
   const info = document.getElementById('info');
   const nameEl = document.getElementById('name');
-  const img = document.getElementById('preview');
   const btnDetect = document.getElementById('btn-detect');
   const btnExportVideo = document.getElementById('btn-export-video');
   const btnExportData = document.getElementById('btn-export-data');
   const jobMsg = document.getElementById('job-msg');
   const bar = document.getElementById('bar');
   const barFill = document.getElementById('bar-fill');
-  let url, currentFile = null, jobId = null, pollTimer = null, isDetecting = false;
+  let currentFile = null, jobId = null, pollTimer = null, isDetecting = false;
 
   card.addEventListener('click', e => {
     if (e.target.id === 'clear') return;
@@ -139,7 +137,6 @@
 
   btnDetect.addEventListener('click', async () => {
     if (!currentFile) { showJob('请先选择要检测的视频', 'error'); return; }
-    if (!isVideoFile(currentFile)) { showJob('检测功能目前仅支持视频文件', 'error'); return; }
     const fd = new FormData();
     fd.append('file', currentFile);
     isDetecting = true;
@@ -211,28 +208,22 @@
   }
 
   function isVideoFile(f) {
-    if (f.type.startsWith('video/')) return true;
-    return /\.(mp4|avi|mov|mkv|webm|m4v|wmv|flv|ts)$/i.test(f.name);
+    return /\.(mp4|avi|mov|mkv)$/i.test(f.name);
   }
 
   function load(f) {
+    if (!isVideoFile(f)) { alert('仅支持上传 MP4 / AVI / MOV / MKV 格式的视频'); return; }
     reset();
     currentFile = f;
     nameEl.textContent = `${f.name}（${(f.size / 1048576).toFixed(2)} MB）`;
-    if (!isVideoFile(f)) {        // 仅图片生成预览；视频不内嵌播放，避免缺少解码器时无法显示
-      url = URL.createObjectURL(f);
-      img.src = url;
-      img.style.display = 'block';
-    }
     info.classList.add('show');
   }
   function reset() {
-    if (url) URL.revokeObjectURL(url);
-    url = null; currentFile = null; jobId = null;
+    currentFile = null; jobId = null;
     if (pollTimer) clearInterval(pollTimer);
     pollTimer = null;
-    input.value = ''; img.removeAttribute('src');
-    img.style.display = 'none'; info.classList.remove('show');
+    input.value = '';
+    info.classList.remove('show');
     document.getElementById('clear').disabled = false;
     btnDetect.disabled = false;
     btnExportVideo.disabled = btnExportData.disabled = true;
